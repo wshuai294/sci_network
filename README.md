@@ -50,6 +50,19 @@ pip install -r requirements.txt
 - `outputs/author_network.png` — Plot of the author network.
 - `outputs/institution_network.png` — Plot of the institution network.
 
+## PI co-authorship network (standalone script)
+
+Given a PI name and optional affiliation (for double-check), build a co-authorship network from their papers in the past 5 years:
+
+```bash
+python pi_coauthor_network.py "Smith J" --affiliation "Harvard"
+python pi_coauthor_network.py "Konstantinidis K" -o outputs/pi_kont
+```
+
+- **Nodes:** All authors appearing on the PI’s papers.  
+- **Edges:** Edge weight = number of papers that author pair co-authored.  
+- Outputs (under `outputs/pi_<name>/` or `--out-dir`): `coauthor_edges.txt`, `papers.txt`, `coauthor_network.gml`, `coauthor_network.png` (use `--no-plot` to skip the figure).
+
 ## Notes
 
 - **Corresponding author:** PubMed XML does not always tag corresponding authors. We use the last author (and second-to-last as co-corresponding) as a proxy.
