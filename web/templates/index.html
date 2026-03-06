@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Researcher network — Science Networks</title>
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f0f12;
+      --surface: #18181c;
+      --border: #2a2a30;
+      --text: #e4e4e7;
+      --muted: #71717a;
+      --accent: #a78bfa;
+      --accent-hover: #c4b5fd;
+      --success: #34d399;
+      --error: #f87171;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .container { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+    .top-nav { margin-bottom: 1rem; }
+    .nav-home { color: var(--muted); font-size: 0.9rem; text-decoration: none; }
+    .nav-home:hover { color: var(--accent); }
+    header {
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    h1 { font-size: 1.5rem; font-weight: 600; margin: 0; }
+    .subtitle { color: var(--muted); font-size: 0.9rem; margin-top: 0.25rem; }
+    .form-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.5rem; }
+    .muted-hint { font-size: 0.8rem; color: var(--muted); display: block; margin-top: 0.25rem; }
+    select {
+      width: 100%;
+      max-width: 280px;
+      padding: 0.5rem 0.75rem;
+      font-size: 1rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      margin-bottom: 0.75rem;
+    }
+    select:focus { outline: none; border-color: var(--accent); }
+    input[type="text"] {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      font-size: 1rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+    }
+    input[type="text"]::placeholder { color: var(--muted); }
+    input[type="text"]:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.2);
+    }
+    textarea {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      font-size: 0.95rem;
+      font-family: ui-monospace, monospace;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      resize: vertical;
+      margin-bottom: 0.5rem;
+    }
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .btn {
+      margin-top: 1rem;
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      font-family: inherit;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .loading {
+      text-align: center;
+      padding: 3rem;
+      color: var(--muted);
+    }
+    .loading.spinner::after {
+      content: '';
+      display: inline-block;
+      width: 24px;
+      height: 24px;
+      margin-left: 0.5rem;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-log {
+      margin-top: 1rem;
+      text-align: left;
+      max-height: 220px;
+      overflow-y: auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      font-size: 0.9rem;
+      font-family: ui-monospace, monospace;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .loading-log div { margin: 0.15rem 0; }
+    .error { color: var(--error); padding: 1rem; background: rgba(248,113,113,0.1); border-radius: 8px; margin-bottom: 1rem; }
+    .result { display: none; }
+    .result.visible { display: block; }
+    .stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; }
+    .stat strong { display: block; font-size: 1.25rem; color: var(--accent); }
+    .stat span { font-size: 0.8rem; color: var(--muted); }
+    .profile-link { margin-bottom: 1rem; }
+    .profile-link a { color: var(--accent); text-decoration: none; }
+    .profile-link a:hover { text-decoration: underline; }
+    .graph-wrapper {
+      position: relative;
+      margin-bottom: 2rem;
+    }
+    .graph-wrapper .graph-toolbar {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .graph-wrapper .btn-small {
+      padding: 0.4rem 0.75rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      font-family: inherit;
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .graph-wrapper .btn-small:hover { border-color: var(--accent); color: var(--accent); }
+    #graph {
+      width: 100%;
+      height: min(960px, 85vh);
+      min-height: 560px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    .graph-wrapper.fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: var(--bg);
+      padding: 1rem;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      border-radius: 0;
+    }
+    .graph-wrapper.fullscreen #graph {
+      flex: 1;
+      min-height: 0;
+      height: auto;
+    }
+    .graph-wrapper.fullscreen .graph-toolbar {
+      flex-shrink: 0;
+    }
+    .region-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1.25rem;
+      align-items: center;
+      margin-bottom: 0.75rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .region-legend .legend-title { margin-right: 0.25rem; font-weight: 600; }
+    .region-legend .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .region-legend .legend-swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      flex-shrink: 0;
+      border: 1px solid rgba(0,0,0,0.15);
+    }
+    .analysis-section { margin-bottom: 1.5rem; }
+    .analysis-section h3 { font-size: 1.1rem; margin-bottom: 0.75rem; }
+    .analysis-section .analysis-stats { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1rem; font-size: 0.9rem; color: var(--muted); }
+    .analysis-section .analysis-stats span { margin-right: 0.5rem; }
+    .analysis-section table { font-size: 0.9rem; }
+    .analysis-section .community-block { margin-bottom: 0.75rem; }
+    .analysis-section .community-block strong { font-size: 0.9rem; }
+    .analysis-section .community-nodes { font-size: 0.85rem; color: var(--muted); margin-top: 0.25rem; }
+    .papers-section h3 { font-size: 1.1rem; margin-bottom: 0.75rem; }
+    .papers-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { padding: 0.6rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+    th { background: var(--surface); color: var(--muted); font-weight: 600; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(167, 139, 250, 0.05); }
+    .authors-cell { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <nav class="top-nav">
+      <a href="/" class="nav-home">← Science Networks</a>
+    </nav>
+    <header>
+      <h1>Researcher network</h1>
+      <p class="subtitle">Co-authorship network for any researcher: nodes are co-authors, edges are shared papers. <strong>Google Scholar</strong>: we read titles only (fast), then fetch authors from PubMed for exact title match and show region by affiliation. Use PubMed or paste list if Scholar is blocked.</p>
+    </header>
+
+    <div class="form-wrap">
+      <label for="source">Source</label>
+      <select id="source" name="source" aria-label="Data source">
+        <option value="google_scholar">Google Scholar</option>
+        <option value="researchgate">ResearchGate</option>
+        <option value="pubmed">PubMed (author search)</option>
+        <option value="paste">Paste list</option>
+      </select>
+      <div id="inputUrlBlock">
+        <label for="profile_url" id="profileUrlLabel">Google Scholar profile URL or user ID</label>
+        <input type="text" id="profile_url" name="profile_url" placeholder="https://scholar.google.com/citations?user=JhtCUvIAAAAJ or JhtCUvIAAAAJ">
+      </div>
+      <div id="inputPubmedBlock" style="display: none;">
+        <label for="author_name">Author name (as in PubMed)</label>
+        <input type="text" id="author_name" name="author_name" placeholder="e.g. Wang Shuai or Smith J">
+        <label for="affiliation">Affiliation (optional, narrows search)</label>
+        <input type="text" id="affiliation" name="affiliation" placeholder="e.g. Berkeley, Ohio State">
+        <label for="pubmed_years">Years of publications</label>
+        <select id="pubmed_years" name="pubmed_years">
+          <option value="1">Last 1 year</option>
+          <option value="2">Last 2 years</option>
+          <option value="3">Last 3 years</option>
+          <option value="5" selected>Last 5 years</option>
+          <option value="7">Last 7 years</option>
+          <option value="10">Last 10 years</option>
+        </select>
+        <label for="pubmed_max_results">Max papers to fetch</label>
+        <select id="pubmed_max_results" name="pubmed_max_results">
+          <option value="200">200</option>
+          <option value="300">300</option>
+          <option value="500" selected>500</option>
+          <option value="1000">1000</option>
+          <option value="1500">1500</option>
+          <option value="2000">2000</option>
+          <option value="3000">3000</option>
+          <option value="4000">4000</option>
+          <option value="5000">5000</option>
+          <option value="10000">10,000</option>
+          <option value="20000">20,000</option>
+          <option value="50000">50,000</option>
+        </select>
+      </div>
+      <div id="inputMinIfBlock">
+        <label for="min_if">Minimum journal impact factor (IF)</label>
+        <select id="min_if" name="min_if" aria-label="Minimum journal IF; papers with no IF data are excluded">
+          <option value="5">5</option>
+          <option value="10" selected>10</option>
+          <option value="15">15</option>
+          <option value="20">20</option>
+        </select>
+        <span class="muted-hint">Used for Google Scholar and PubMed only. Papers whose journal has no IF data are excluded.</span>
+      </div>
+      <div id="inputPasteBlock" style="display: none;">
+        <label for="pasted_text">One paper per line: Title | Author1, Author2</label>
+        <textarea id="pasted_text" name="pasted_text" rows="8" placeholder="Paper One | Alice, Bob, Carol&#10;Paper Two | Bob, Dave"></textarea>
+      </div>
+      <button type="button" class="btn" id="buildBtn">Build network</button>
+    </div>
+
+    <div id="loading" class="loading" style="display: none;">
+      <span class="spinner"></span>
+      <span id="loadingText">Starting…</span>
+      <div id="loadingLog" class="loading-log" aria-live="polite"></div>
+    </div>
+
+    <div id="error" class="error" style="display: none;"></div>
+
+    <div id="result" class="result">
+      <div class="profile-link"></div>
+      <div class="graph-wrapper" id="graphWrapper">
+        <div class="graph-toolbar">
+          <button type="button" class="btn-small" id="fullscreenBtn" title="Double-click or use button for full screen">Full screen</button>
+        </div>
+        <div id="graph"></div>
+      </div>
+      <div class="stats"></div>
+      <div id="regionLegend" class="region-legend" aria-label="Region colors"></div>
+      <div id="analysisSection" class="analysis-section" style="display: none;"></div>
+      <div class="papers-section">
+        <h3>Publications</h3>
+        <div class="papers-table-wrap">
+          <table id="papersTable">
+            <thead><tr><th>Title</th><th>Authors</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const sourceSelect = document.getElementById('source');
+    const profileInput = document.getElementById('profile_url');
+    const profileUrlLabel = document.getElementById('profileUrlLabel');
+    const buildBtn = document.getElementById('buildBtn');
+
+    const inputUrlBlock = document.getElementById('inputUrlBlock');
+    const inputPubmedBlock = document.getElementById('inputPubmedBlock');
+    const inputPasteBlock = document.getElementById('inputPasteBlock');
+    const authorNameInput = document.getElementById('author_name');
+    const affiliationInput = document.getElementById('affiliation');
+    const pastedTextInput = document.getElementById('pasted_text');
+
+    const placeholders = {
+      google_scholar: 'https://scholar.google.com/citations?user=JhtCUvIAAAAJ or JhtCUvIAAAAJ',
+      researchgate: 'https://www.researchgate.net/profile/Firstname-Lastname'
+    };
+    const labels = {
+      google_scholar: 'Google Scholar profile URL or user ID',
+      researchgate: 'ResearchGate profile URL'
+    };
+    const inputMinIfBlock = document.getElementById('inputMinIfBlock');
+    function updateInputVisibility() {
+      const v = sourceSelect.value;
+      inputUrlBlock.style.display = (v === 'google_scholar' || v === 'researchgate') ? 'block' : 'none';
+      inputPubmedBlock.style.display = v === 'pubmed' ? 'block' : 'none';
+      inputPasteBlock.style.display = v === 'paste' ? 'block' : 'none';
+      inputMinIfBlock.style.display = (v === 'google_scholar' || v === 'pubmed') ? 'block' : 'none';
+      if (v === 'google_scholar' || v === 'researchgate') {
+        profileInput.placeholder = placeholders[v] || placeholders.google_scholar;
+        profileUrlLabel.textContent = labels[v] || labels.google_scholar;
+      }
+    }
+    sourceSelect.addEventListener('change', updateInputVisibility);
+    updateInputVisibility();
+    const loading = document.getElementById('loading');
+    const errorEl = document.getElementById('error');
+    const resultEl = document.getElementById('result');
+    const profileLinkEl = resultEl.querySelector('.profile-link');
+    const statsEl = resultEl.querySelector('.stats');
+    const graphEl = document.getElementById('graph');
+    const graphWrapper = document.getElementById('graphWrapper');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const papersBody = document.getElementById('papersTable').querySelector('tbody');
+
+    let network = null;
+
+    fullscreenBtn.addEventListener('click', () => {
+      graphWrapper.classList.toggle('fullscreen');
+      fullscreenBtn.textContent = graphWrapper.classList.contains('fullscreen') ? 'Close full screen' : 'Full screen';
+      if (network) {
+        setTimeout(() => { network.fit(); }, 100);
+      }
+    });
+
+    const loadingText = document.getElementById('loadingText');
+    const loadingLog = document.getElementById('loadingLog');
+    const regionLegendEl = document.getElementById('regionLegend');
+    const analysisSectionEl = document.getElementById('analysisSection');
+
+    // Region colors (must match backend pi_coauthor_network._region_color)
+    const REGION_ORDER = ['China', 'US', 'UK', 'Europe', 'Japan', 'Australia', 'Canada', 'Others'];
+    const REGION_COLORS = {
+      China: '#e74c3c', US: '#3498db', UK: '#2ecc71', Europe: '#9b59b6',
+      Japan: '#f39c12', Australia: '#1abc9c', Canada: '#e67e22', Others: '#95a5a6'
+    };
+    function renderRegionLegend() {
+      const parts = ['<span class="legend-title">Region</span>'];
+      REGION_ORDER.forEach(r => {
+        const color = REGION_COLORS[r] || REGION_COLORS.Others;
+        parts.push(`<span class="legend-item"><span class="legend-swatch" style="background:${color}"></span><span>${r}</span></span>`);
+      });
+      regionLegendEl.innerHTML = parts.join('');
+    }
+
+    buildBtn.addEventListener('click', async () => {
+      const source = sourceSelect.value || 'google_scholar';
+      let body = { source: source, stream: true };
+      if (source === 'pubmed') {
+        const author = authorNameInput.value.trim();
+        if (!author) {
+          showError('Please enter author name for PubMed search.');
+          return;
+        }
+        body.author_name = author;
+        body.affiliation = affiliationInput.value.trim();
+        body.years = parseInt(document.getElementById('pubmed_years').value, 10);
+        body.max_results = parseInt(document.getElementById('pubmed_max_results').value, 10);
+        body.min_if = parseFloat(document.getElementById('min_if').value) || 10;
+      } else if (source === 'paste') {
+        const text = pastedTextInput.value.trim();
+        if (!text) {
+          showError('Please paste at least one line: Title | Author1, Author2');
+          return;
+        }
+        body.pasted_text = text;
+      } else {
+        const url = profileInput.value.trim();
+        if (!url) {
+          showError('Please enter a profile URL.');
+          return;
+        }
+        body.profile_url = url;
+        if (source === 'google_scholar') {
+          body.min_if = parseFloat(document.getElementById('min_if').value) || 10;
+        }
+      }
+      hideError();
+      loading.style.display = 'block';
+      loadingText.textContent = source === 'paste' ? 'Parsing list…' : 'Fetching…';
+      loadingLog.innerHTML = '';
+      resultEl.classList.remove('visible');
+      buildBtn.disabled = true;
+      try {
+        const res = await fetch('/build', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          showError(data.error || 'Request failed');
+          return;
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let data = null;
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const obj = JSON.parse(line);
+              if (obj.type === 'progress') {
+                const div = document.createElement('div');
+                div.textContent = obj.message || '';
+                loadingLog.appendChild(div);
+                loadingLog.scrollTop = loadingLog.scrollHeight;
+              } else if (obj.type === 'error') {
+                showError(obj.error || 'Error');
+                data = null;
+                break;
+              } else if (obj.type === 'result' && obj.data) {
+                data = obj.data;
+              }
+            } catch (_) {}
+          }
+        }
+        if (data) {
+          loadingText.textContent = 'Done.';
+          renderResult(data);
+          resultEl.classList.add('visible');
+        }
+      } catch (e) {
+        showError(e.message || 'Network error');
+      } finally {
+        loading.style.display = 'none';
+        buildBtn.disabled = false;
+      }
+    });
+
+    function showError(msg) {
+      errorEl.textContent = msg;
+      errorEl.style.display = 'block';
+    }
+    function hideError() {
+      errorEl.style.display = 'none';
+    }
+
+    function renderResult(data) {
+      renderRegionLegend();
+      if (data.profile_url) {
+        profileLinkEl.style.color = '';
+        const profileLabel = (data.profile_url || '').includes('researchgate') ? 'ResearchGate' : 'Google Scholar';
+        profileLinkEl.innerHTML = `${profileLabel}: <a href="${data.profile_url}" target="_blank" rel="noopener">${data.pi_name} (double-check)</a>`;
+      } else {
+        profileLinkEl.textContent = data.pi_name || '';
+        profileLinkEl.style.color = 'var(--muted)';
+      }
+
+      statsEl.innerHTML = `
+        <div class="stat"><strong>${data.n_papers}</strong><span>Papers</span></div>
+        <div class="stat"><strong>${data.n_authors}</strong><span>Authors</span></div>
+        <div class="stat"><strong>${data.n_edges}</strong><span>Co-author edges</span></div>
+      `;
+
+      const nodes = new vis.DataSet(data.nodes);
+      const edges = new vis.DataSet(data.edges);
+      const opts = {
+        nodes: { font: { size: 26, color: '#000000', face: 'DM Sans, system-ui, sans-serif' }, borderWidth: 2, borderColor: '#3f3f46', size: 32 },
+        edges: { width: 1.5 },
+        physics: { enabled: true, solver: 'forceAtlas2Based', forceAtlas2Based: { gravitationalConstant: -35, springLength: 100 } },
+        interaction: { hover: true, tooltipDelay: 80 }
+      };
+      if (network) network.destroy();
+      network = new vis.Network(graphEl, { nodes, edges }, opts);
+      if (fullscreenBtn.textContent === 'Close full screen') fullscreenBtn.textContent = 'Full screen';
+      graphWrapper.classList.remove('fullscreen');
+
+      papersBody.innerHTML = '';
+      (data.papers || []).forEach(p => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${escapeHtml(p.title || '')}</td>
+          <td class="authors-cell" title="${escapeHtml((p.authors || []).join('; '))}">${escapeHtml((p.authors || []).join('; '))}</td>
+        `;
+        papersBody.appendChild(tr);
+      });
+
+      if (data.analysis) {
+        analysisSectionEl.style.display = 'block';
+        const a = data.analysis;
+        let html = '<h3>Network analysis</h3>';
+        html += '<div class="analysis-stats"><span><strong>Connected components:</strong> ' + (a.n_components ?? '—') + '</span><span><strong>Density:</strong> ' + (a.density ?? '—') + '</span><span><strong>Avg. clustering:</strong> ' + (a.avg_clustering ?? '—') + '</span></div>';
+        if (a.top_degree && a.top_degree.length) {
+          html += '<p><strong>Top nodes by degree</strong></p><div class="papers-table-wrap"><table><thead><tr><th>Rank</th><th>Node</th><th>Degree</th></tr></thead><tbody>';
+          a.top_degree.forEach((row, i) => { html += '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(row.node) + '</td><td>' + row.degree + '</td></tr>'; });
+          html += '</tbody></table></div>';
+        }
+        if (a.communities && a.communities.length) {
+          html += '<p style="margin-top:1rem;"><strong>Communities</strong> (label propagation)</p>';
+          a.communities.slice(0, 15).forEach((c, i) => {
+            const nodesStr = (c.nodes || []).slice(0, 10).map(escapeHtml).join(', ') + (c.nodes && c.nodes.length > 10 ? '…' : '');
+            html += '<div class="community-block"><strong>Community ' + (i + 1) + '</strong> (' + c.size + ' nodes)<div class="community-nodes">' + nodesStr + '</div></div>';
+          });
+          if (a.communities.length > 15) html += '<p class="community-nodes">… and ' + (a.communities.length - 15) + ' more communities</p>';
+        }
+        analysisSectionEl.innerHTML = html;
+      } else {
+        analysisSectionEl.style.display = 'none';
+        analysisSectionEl.innerHTML = '';
+      }
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

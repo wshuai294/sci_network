@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PI (Author) Network — Science Networks</title>
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f0f12; --surface: #18181c; --border: #2a2a30; --text: #e4e4e7; --muted: #71717a;
+      --accent: #a78bfa; --accent-hover: #c4b5fd; --error: #f87171;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+    .top-nav { margin-bottom: 1rem; }
+    .nav-home { color: var(--muted); font-size: 0.9rem; text-decoration: none; }
+    .nav-home:hover { color: var(--accent); }
+    header { margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+    h1 { font-size: 1.5rem; font-weight: 600; margin: 0; }
+    .subtitle { color: var(--muted); font-size: 0.9rem; margin-top: 0.25rem; }
+    .form-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.5rem; }
+    select, input[type="text"], input[type="number"] {
+      width: 100%; max-width: 320px; padding: 0.6rem 0.75rem; font-size: 1rem;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); margin-bottom: 0.75rem;
+    }
+    select:focus, input:focus { outline: none; border-color: var(--accent); }
+    .btn { margin-top: 1rem; padding: 0.75rem 1.5rem; font-size: 1rem; font-weight: 600; font-family: inherit; background: var(--accent); color: #fff; border: none; border-radius: 8px; cursor: pointer; }
+    .btn:hover { background: var(--accent-hover); }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .loading { text-align: center; padding: 3rem; color: var(--muted); }
+    .loading .spinner::after {
+      content: ''; display: inline-block; width: 20px; height: 20px; margin-right: 0.5rem; vertical-align: middle;
+      border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-log { text-align: left; max-height: 200px; overflow-y: auto; margin-top: 1rem; font-size: 0.85rem; color: var(--muted); }
+    .error { background: rgba(248,113,113,0.1); border: 1px solid var(--error); color: var(--error); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; }
+    .result { display: none; }
+    .result.visible { display: block; }
+    .stats { display: flex; gap: 2rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .stat { display: flex; flex-direction: column; }
+    .stat strong { font-size: 1.5rem; color: var(--text); }
+    .stat span { font-size: 0.85rem; color: var(--muted); }
+    .profile-link { margin-bottom: 0.5rem; font-size: 0.9rem; }
+    .region-legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: center; margin-bottom: 0.75rem; font-size: 0.85rem; color: var(--muted); }
+    .region-legend .legend-title { margin-right: 0.25rem; font-weight: 600; }
+    .region-legend .legend-item { display: inline-flex; align-items: center; gap: 0.35rem; }
+    .region-legend .legend-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.15); }
+    .graph-wrapper { position: relative; margin-bottom: 1.5rem; }
+    .graph-toolbar { margin-bottom: 0.5rem; }
+    .btn-small { padding: 0.4rem 0.75rem; font-size: 0.85rem; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+    #graph { width: 100%; height: min(960px, 85vh); min-height: 560px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+    .graph-wrapper.fullscreen { position: fixed; inset: 0; z-index: 9999; background: var(--bg); padding: 1rem; margin: 0; display: flex; flex-direction: column; border-radius: 0; }
+    .graph-wrapper.fullscreen #graph { flex: 1; min-height: 0; height: auto; }
+    .papers-section h3 { font-size: 1.1rem; margin-bottom: 0.75rem; }
+    .papers-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { padding: 0.6rem 1rem; text-align: left; border-bottom: 1px solid var(--border); }
+    th { background: var(--surface); color: var(--muted); font-weight: 600; }
+    .authors-cell { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .analysis-section { margin-bottom: 1.5rem; }
+    .analysis-section h3 { font-size: 1.1rem; margin-bottom: 0.75rem; }
+    .analysis-section .analysis-stats { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1rem; font-size: 0.9rem; color: var(--muted); }
+    .analysis-section .community-block { margin-bottom: 0.75rem; }
+    .analysis-section .community-nodes { font-size: 0.85rem; color: var(--muted); margin-top: 0.25rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <nav class="top-nav"><a href="/" class="nav-home">← Science Networks</a></nav>
+    <header>
+      <h1>🔬 PI (Author) Network</h1>
+      <p class="subtitle">PI (corresponding author) network by research area. <strong>Only corresponding authors</strong> are included (we use last and second-to-last author per paper as corresponding/co-corresponding); edges connect PIs who were co-corresponding on the same paper. Built from PubMed by topic. If the network has more than 1000 nodes, the top 1000 by degree are shown.</p>
+    </header>
+    <div class="form-wrap">
+      <label for="research_area">Research area</label>
+      <select id="research_area" name="research_area">
+        {% for value, label in research_areas %}
+        <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+        <option value="">Custom (use below)</option>
+      </select>
+      <label for="custom_query">Custom query (optional — overrides research area if set)</label>
+      <input type="text" id="custom_query" name="custom_query" placeholder="e.g. synthetic biology">
+      <label for="years">Years of publications</label>
+      <select id="years" name="years">
+        <option value="1">Last 1 year</option>
+        <option value="2">Last 2 years</option>
+        <option value="3">Last 3 years</option>
+        <option value="5" selected>Last 5 years</option>
+        <option value="7">Last 7 years</option>
+        <option value="10">Last 10 years</option>
+      </select>
+      <label for="max_results">Max papers to fetch (PubMed)</label>
+      <select id="max_results" name="max_results">
+        <option value="200">200</option>
+        <option value="300">300</option>
+        <option value="500" selected>500</option>
+        <option value="1000">1000</option>
+        <option value="1500">1500</option>
+        <option value="2000">2000</option>
+        <option value="3000">3000</option>
+        <option value="4000">4000</option>
+        <option value="5000">5000</option>
+        <option value="10000">10,000</option>
+        <option value="20000">20,000</option>
+        <option value="50000">50,000</option>
+      </select>
+      <label for="min_if">Minimum journal impact factor (IF)</label>
+      <select id="min_if" name="min_if">
+        <option value="5">5</option>
+        <option value="10" selected>10</option>
+        <option value="15">15</option>
+        <option value="20">20</option>
+      </select>
+      <button type="button" class="btn" id="buildBtn">Build author network</button>
+    </div>
+    <div id="loading" class="loading" style="display: none;">
+      <span class="spinner"></span>
+      <span id="loadingText">Starting…</span>
+      <div id="loadingLog" class="loading-log" aria-live="polite"></div>
+    </div>
+    <div id="error" class="error" style="display: none;"></div>
+    <div id="result" class="result">
+      <div class="profile-link"></div>
+      <div class="graph-wrapper" id="graphWrapper">
+        <div class="graph-toolbar">
+          <button type="button" class="btn-small" id="fullscreenBtn">Full screen</button>
+        </div>
+        <div id="graph"></div>
+      </div>
+      <div class="stats"></div>
+      <div id="regionLegend" class="region-legend"></div>
+      <div id="analysisSection" class="analysis-section" style="display: none;"></div>
+      <div class="papers-section">
+        <h3>Sample publications</h3>
+        <div class="papers-table-wrap">
+          <table id="papersTable">
+            <thead><tr><th>Title</th><th>Authors</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    const REGION_ORDER = ['China', 'US', 'UK', 'Europe', 'Japan', 'Australia', 'Canada', 'Others'];
+    const REGION_COLORS = { China: '#e74c3c', US: '#3498db', UK: '#2ecc71', Europe: '#9b59b6', Japan: '#f39c12', Australia: '#1abc9c', Canada: '#e67e22', Others: '#95a5a6' };
+    function renderRegionLegend() {
+      const el = document.getElementById('regionLegend');
+      const parts = ['<span class="legend-title">Region</span>'];
+      REGION_ORDER.forEach(r => { parts.push(`<span class="legend-item"><span class="legend-swatch" style="background:${REGION_COLORS[r] || REGION_COLORS.Others}"></span><span>${r}</span></span>`); });
+      el.innerHTML = parts.join('');
+    }
+    const buildBtn = document.getElementById('buildBtn');
+    const loading = document.getElementById('loading');
+    const loadingText = document.getElementById('loadingText');
+    const loadingLog = document.getElementById('loadingLog');
+    const errorEl = document.getElementById('error');
+    const resultEl = document.getElementById('result');
+    const profileLinkEl = resultEl.querySelector('.profile-link');
+    const statsEl = resultEl.querySelector('.stats');
+    const graphEl = document.getElementById('graph');
+    const graphWrapper = document.getElementById('graphWrapper');
+    const fullscreenBtn = document.getElementById('fullscreenBtn');
+    const papersBody = document.getElementById('papersTable').querySelector('tbody');
+    let network = null;
+    fullscreenBtn.addEventListener('click', () => {
+      graphWrapper.classList.toggle('fullscreen');
+      fullscreenBtn.textContent = graphWrapper.classList.contains('fullscreen') ? 'Close full screen' : 'Full screen';
+      if (network) setTimeout(() => network.fit(), 100);
+    });
+    buildBtn.addEventListener('click', async () => {
+      const custom = document.getElementById('custom_query').value.trim();
+      const area = document.getElementById('research_area').value;
+      const research_area = custom || area;
+      if (!research_area) { errorEl.textContent = 'Choose a research area or enter a custom query.'; errorEl.style.display = 'block'; return; }
+      const years = parseInt(document.getElementById('years').value, 10);
+      const max_results = parseInt(document.getElementById('max_results').value, 10);
+      const min_if = parseFloat(document.getElementById('min_if').value) || 10;
+      errorEl.style.display = 'none';
+      loading.style.display = 'block';
+      loadingText.textContent = 'Searching PubMed…';
+      loadingLog.innerHTML = '';
+      resultEl.classList.remove('visible');
+      buildBtn.disabled = true;
+      try {
+        const res = await fetch('/build-pi-network', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ research_area, custom_query: custom || null, years, max_results, min_if, stream: true }) });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); errorEl.textContent = d.error || 'Request failed'; errorEl.style.display = 'block'; return; }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '', data = null;
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const obj = JSON.parse(line);
+              if (obj.type === 'progress') { const d = document.createElement('div'); d.textContent = obj.message || ''; loadingLog.appendChild(d); loadingLog.scrollTop = loadingLog.scrollHeight; }
+              else if (obj.type === 'error') { errorEl.textContent = obj.error || 'Error'; errorEl.style.display = 'block'; data = null; break; }
+              else if (obj.type === 'result' && obj.data) data = obj.data;
+            } catch (_) {}
+          }
+        }
+        if (data) { loadingText.textContent = 'Done.'; renderResult(data); resultEl.classList.add('visible'); }
+      } catch (e) { errorEl.textContent = e.message || 'Network error'; errorEl.style.display = 'block'; }
+      finally { loading.style.display = 'none'; buildBtn.disabled = false; }
+    });
+    function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function renderAnalysis(el, a) {
+      if (!a) { el.style.display = 'none'; el.innerHTML = ''; return; }
+      el.style.display = 'block';
+      let html = '<h3>Network analysis</h3><div class="analysis-stats"><span><strong>Connected components:</strong> ' + (a.n_components ?? '—') + '</span><span><strong>Density:</strong> ' + (a.density ?? '—') + '</span><span><strong>Avg. clustering:</strong> ' + (a.avg_clustering ?? '—') + '</span></div>';
+      if (a.top_degree && a.top_degree.length) { html += '<p><strong>Top nodes by degree</strong></p><div class="papers-table-wrap"><table><thead><tr><th>Rank</th><th>Node</th><th>Degree</th></tr></thead><tbody>'; a.top_degree.forEach((row, i) => { html += '<tr><td>' + (i + 1) + '</td><td>' + escapeHtml(row.node) + '</td><td>' + row.degree + '</td></tr>'; }); html += '</tbody></table></div>'; }
+      if (a.communities && a.communities.length) { html += '<p style="margin-top:1rem;"><strong>Communities</strong></p>'; a.communities.slice(0, 15).forEach((c, i) => { const nodesStr = (c.nodes || []).slice(0, 10).map(escapeHtml).join(', ') + (c.nodes && c.nodes.length > 10 ? '…' : ''); html += '<div class="community-block"><strong>Community ' + (i + 1) + '</strong> (' + c.size + ' nodes)<div class="community-nodes">' + nodesStr + '</div></div>'; }); if (a.communities.length > 15) html += '<p class="community-nodes">… and ' + (a.communities.length - 15) + ' more</p>'; }
+      el.innerHTML = html;
+    }
+    function renderResult(data) {
+      renderRegionLegend();
+      profileLinkEl.textContent = data.pi_name || '';
+      profileLinkEl.style.color = 'var(--muted)';
+      statsEl.innerHTML = `<div class="stat"><strong>${data.n_papers}</strong><span>Papers</span></div><div class="stat"><strong>${data.n_authors}</strong><span>Authors</span></div><div class="stat"><strong>${data.n_edges}</strong><span>Co-author edges</span></div>`;
+      const nodes = new vis.DataSet(data.nodes);
+      const edges = new vis.DataSet(data.edges);
+      if (network) network.destroy();
+      network = new vis.Network(graphEl, { nodes, edges }, { nodes: { font: { size: 24, color: '#000', face: 'DM Sans, system-ui, sans-serif' }, borderWidth: 2, borderColor: '#3f3f46', size: 30 }, edges: { width: 1.5 }, physics: { enabled: true, solver: 'forceAtlas2Based', forceAtlas2Based: { gravitationalConstant: -35, springLength: 100 } }, interaction: { hover: true, tooltipDelay: 80 } });
+      graphWrapper.classList.remove('fullscreen');
+      fullscreenBtn.textContent = 'Full screen';
+      renderAnalysis(document.getElementById('analysisSection'), data.analysis);
+      papersBody.innerHTML = '';
+      (data.papers || []).forEach(p => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + (p.title || '').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</td><td class="authors-cell">' + (p.authors || []).join('; ').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</td>';
+        papersBody.appendChild(tr);
+      });
+    }
+  </script>
+</body>
+</html>

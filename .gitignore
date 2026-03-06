@@ -4,6 +4,7 @@ outputs/
 
 # Virtual env
 .venv/
+.venv_plot/
 venv/
 env/
 

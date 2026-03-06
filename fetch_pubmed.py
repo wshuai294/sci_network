@@ -105,20 +105,22 @@ def _brief_institution(name: str, max_len: int = 35) -> str:
 PUBMED_ESEARCH_MAX = 10000
 
 
-def search_metagenomics_pmids(
+def search_pmids_by_query(
+    query: str,
     mindate: str = "2020/01/01",
     maxdate: str = "2025/12/31",
-    max_results: int | None = None,
+    max_results: int | None = 500,
 ) -> list[str]:
     """
-    Search PubMed for metagenomics papers. If max_results is None, fetch ALL by splitting
-    the date range into year chunks (PubMed returns at most 10,000 per query).
+    Search PubMed by free-text query (e.g. research area). Returns PMID list.
+    If max_results is None, fetches all by splitting date range into year chunks.
     """
-    query = "metagenomics"
+    if not query or not query.strip():
+        return []
+    query = query.strip()
     all_ids = []
 
     if max_results is None:
-        # Get all: search per year to avoid 10k limit, then merge
         import datetime
         start = datetime.datetime.strptime(mindate[:10].replace("/", "-"), "%Y-%m-%d")
         end = datetime.datetime.strptime(maxdate[:10].replace("/", "-"), "%Y-%m-%d")
@@ -160,12 +162,12 @@ def search_metagenomics_pmids(
             time.sleep(0.34)
         return all_ids
 
-    # Bounded request
     retstart = 0
-    chunk = min(SEARCH_BATCH, max_results)
-    while retstart < max_results:
+    chunk = min(SEARCH_BATCH, max_results or 500)
+    limit = max_results if max_results is not None else 500
+    while retstart < limit:
         try:
-            retmax = min(chunk, max_results - retstart)
+            retmax = min(chunk, limit - retstart)
             handle = Entrez.esearch(
                 db="pubmed",
                 term=query,
@@ -189,7 +191,19 @@ def search_metagenomics_pmids(
         if len(ids) < chunk:
             break
         time.sleep(0.34)
-    return all_ids[:max_results]
+    return all_ids[:limit]
+
+
+def search_metagenomics_pmids(
+    mindate: str = "2020/01/01",
+    maxdate: str = "2025/12/31",
+    max_results: int | None = None,
+) -> list[str]:
+    """
+    Search PubMed for metagenomics papers. If max_results is None, fetch ALL by splitting
+    the date range into year chunks (PubMed returns at most 10,000 per query).
+    """
+    return search_pmids_by_query("metagenomics", mindate=mindate, maxdate=maxdate, max_results=max_results)
 
 
 def _normalize_author(author_dict: dict) -> str:
@@ -214,14 +228,11 @@ def _extract_affiliation(author_dict: dict) -> list[str]:
 
 def _is_corresponding(author_dict: dict, index: int, total: int) -> bool:
     """
-    Heuristic: corresponding author is often last author, or has Identifier/email.
-    PubMed XML does not always tag 'corresp'; we use last author and optionally
-    second-to-last (co-corresponding).
+    Heuristic: corresponding authors are often the last and second-to-last (co-corresponding).
+    PubMed XML does not always tag 'corresp'; we use last author and co-last when present.
     """
-    # Last author is typically corresponding in life sciences
     if index == total - 1:
         return True
-    # Some papers use co-last (last two) as co-corresponding
     if total >= 2 and index == total - 2:
         return True
     return False
@@ -324,8 +335,18 @@ def _parse_article(article: dict) -> dict | None:
     try:
         med = article["MedlineCitation"]
         art = med["Article"]
-        author_list = art.get("AuthorList", [])
+        raw_authors = art.get("AuthorList", [])
     except KeyError:
+        return None
+
+    # Normalize: Entrez can return a single Author dict when there is one author (not a list).
+    if not raw_authors:
+        return None
+    if isinstance(raw_authors, dict) and "LastName" in raw_authors:
+        author_list = [raw_authors]
+    elif isinstance(raw_authors, list):
+        author_list = [a for a in raw_authors if isinstance(a, dict) and a.get("LastName")]
+    else:
         return None
 
     if not author_list:
@@ -336,6 +357,14 @@ def _parse_article(article: dict) -> dict | None:
         title = " ".join(str(t) for t in title) if title else ""
     else:
         title = str(title or "").strip()
+
+    journal = ""
+    j = art.get("Journal", {}) or {}
+    if isinstance(j, dict):
+        journal = j.get("Title") or j.get("ISOAbbreviation") or ""
+    if isinstance(journal, list):
+        journal = " ".join(str(x) for x in journal) if journal else ""
+    journal = str(journal or "").strip()
 
     total = len(author_list)
     corresponding = []
@@ -363,23 +392,26 @@ def _parse_article(article: dict) -> dict | None:
     return {
         "pmid": pmid,
         "title": title,
+        "journal": journal,
         "corresponding": corresponding,
         "author_affiliations": author_affiliations,
     }
 
 
-# Region keywords for inferring author region from affiliation text (must match visualize_networks.REGION_KEYWORDS)
+# Region keywords for inferring author/institution region (match pi_coauthor_network and web legend)
 _REGION_KEYWORDS = {
     "China": ["China", "Chinese", "Beijing", "Shanghai", "Hong Kong", "Fudan", "Tsinghua", "Zhejiang", "Wuhan", "Nanjing", "Sun Yat-sen", "Chinese Acad", "CAS", "Peking", "Huazhong", "Nankai"],
     "US": ["USA", "U.S.A", "United States", "America", "Harvard", "Stanford", "MIT", "Yale", "Columbia", "California", "Berkeley", "Michigan", "Cornell", "Duke", "Johns Hopkins", "Texas", "Washington", "Chicago", "Boston", "U.S."],
     "UK": ["UK", "U.K", "United Kingdom", "England", "Oxford", "Cambridge", "London", "Edinburgh", "Imperial", "UCL", "Bristol", "Leeds", "Glasgow"],
-    "Japan": ["Japan", "Japanese", "Tokyo", "Kyoto", "Osaka", "Waseda", "Tohoku", "Riken"],
     "Europe": ["Germany", "French", "France", "Netherlands", "Switzerland", "Sweden", "Denmark", "Italy", "Spain", "Munich", "Berlin", "Paris", "Amsterdam", "Zurich", "ETH", "Max Planck", "CNRS", "INSERM", "Karolinska", "Vienna"],
+    "Japan": ["Japan", "Japanese", "Tokyo", "Kyoto", "Osaka", "Waseda", "Tohoku", "Riken"],
+    "Australia": ["Australia", "Australian", "Sydney", "Melbourne", "Brisbane", "Perth", "Adelaide", "Canberra", "Queensland", "New South Wales", "Monash", "UNSW", "University of Sydney", "University of Melbourne"],
+    "Canada": ["Canada", "Canadian", "Toronto", "Vancouver", "Montreal", "McGill", "British Columbia", "UBC", "Alberta", "Ontario", "Quebec", "Calgary", "Waterloo", "University of Toronto"],
 }
 
 
 def _affiliation_to_region(aff_text: str) -> str:
-    """Infer region from affiliation string. Returns China, US, UK, Europe, Japan, or Others."""
+    """Infer region from affiliation string. Returns China, US, UK, Europe, Japan, Australia, Canada, or Others."""
     if not aff_text:
         return "Others"
     lower = aff_text.lower()
@@ -388,6 +420,11 @@ def _affiliation_to_region(aff_text: str) -> str:
             if kw.lower() in lower:
                 return region
     return "Others"
+
+
+def institution_region(inst_name: str) -> str:
+    """Infer region from institution name (for network node coloring)."""
+    return _affiliation_to_region(inst_name or "")
 
 
 def build_author_regions(records: list[dict]) -> dict[str, str]:
@@ -429,6 +466,192 @@ def build_author_network(records: list[dict]) -> tuple[defaultdict, set]:
                 co_edges[(a, b)] += 1
 
     return co_edges, all_authors
+
+
+def build_corresponding_author_network(records: list[dict]) -> tuple[defaultdict, set]:
+    """
+    Build co-authorship network using only corresponding authors per paper (PI network).
+    A paper can have more than one corresponding author (e.g. last + co-last).
+    Node = corresponding author; edge weight = number of papers where they were co-corresponding.
+    Papers with 0 or 1 corresponding author contribute no edges.
+    """
+    co_edges = defaultdict(int)
+    all_authors = set()
+
+    for rec in records:
+        corresponding = rec.get("corresponding") or []
+        names = list(dict.fromkeys(c[0] for c in corresponding if c[0]))
+        for n in names:
+            all_authors.add(n)
+        for i in range(len(names)):
+            for j in range(i + 1, len(names)):
+                a, b = sorted([names[i], names[j]])
+                co_edges[(a, b)] += 1
+
+    return co_edges, all_authors
+
+
+# Path to QS top 500 list (one institution name per line). If missing, embedded list is used.
+_DATA_DIR = Path(__file__).resolve().parent / "data"
+_QS_TOP500_PATH = _DATA_DIR / "qs_top500.txt"
+
+# Embedded QS-style names (top ~500 or so) when data/qs_top500.txt is not present.
+_QS_TOP500_EMBEDDED = (
+    "Massachusetts Institute of Technology", "University of Cambridge", "University of Oxford",
+    "Harvard University", "Stanford University", "Imperial College London",
+    "ETH Zurich", "National University of Singapore", "UCL", "UC Berkeley",
+    "University of Chicago", "University of Pennsylvania", "Cornell University",
+    "University of Melbourne", "California Institute of Technology", "Yale University",
+    "Peking University", "Tsinghua University", "Princeton University", "University of New South Wales",
+    "University of Sydney", "University of Toronto", "University of Edinburgh", "Columbia University",
+    "Université PSL", "Nanyang Technological University", "Johns Hopkins University", "University of Hong Kong",
+    "University of Tokyo", "McGill University", "University of Manchester", "University of Michigan",
+    "Australian National University", "Northwestern University", "Fudan University", "University of Bristol",
+    "KU Leuven", "Technical University of Munich", "London School of Economics", "Delft University of Technology",
+    "Monash University", "University of Texas at Austin", "University of Illinois Urbana-Champaign",
+    "University of Amsterdam", "Hong Kong University of Science and Technology", "King's College London",
+    "Kyoto University", "Seoul National University", "KAIST", "Shanghai Jiao Tong University",
+    "University of Wisconsin-Madison", "University of Washington", "Lund University", "KTH Royal Institute of Technology",
+    "University of British Columbia", "Institut Polytechnique de Paris", "New York University",
+    "Chinese University of Hong Kong", "Zhejiang University", "University of Queensland",
+    "Duke University", "University of North Carolina Chapel Hill", "Osaka University",
+    "Boston University", "University of Zurich", "Sorbonne University", "Brown University",
+    "Penn State University", "University of Leeds", "University of Birmingham", "University of Sheffield",
+    "Rice University", "Ohio State University", "University of Western Australia", "University of Southampton",
+    "University of Groningen", "University of Oslo", "University of Helsinki", "University of Geneva",
+    "University of Warwick", "University of St Andrews", "University of Nottingham", "University of York",
+    "University of Glasgow", "University of Birmingham", "University of Liverpool", "Durham University",
+    "University of Copenhagen", "University of Barcelona", "Universidad de Buenos Aires",
+    "University of California Los Angeles", "University of California San Diego", "University of California Davis",
+    "University of California Santa Barbara", "University of Maryland", "Purdue University",
+    "University of Pittsburgh", "University of Minnesota", "University of Florida", "Texas A&M University",
+    "University of Colorado Boulder", "University of Arizona", "University of Utah", "Michigan State University",
+    "Georgia Institute of Technology", "University of Virginia", "University of Iowa", "Indiana University",
+    "Vanderbilt University", "Emory University", "Case Western Reserve University", "University of Rochester",
+    "Carnegie Mellon University", "University of Southern California", "University of California Irvine",
+    "University of California San Francisco", "University of California Santa Cruz", "University of California Riverside",
+    "Arizona State University", "Florida State University", "North Carolina State University", "University of Massachusetts",
+    "University of Waterloo", "McMaster University", "University of Alberta", "Western University",
+    "Simon Fraser University", "University of Calgary", "Queen's University", "Université de Montréal",
+    "University of Geneva", "EPFL", "University of Lausanne", "University of Bern", "University of Basel",
+    "Heidelberg University", "Ludwig Maximilian University of Munich", "Humboldt University of Berlin",
+    "Free University of Berlin", "University of Freiburg", "University of Bonn", "University of Göttingen",
+    "University of Hamburg", "University of Cologne", "University of Frankfurt", "University of Stuttgart",
+    "University of Tübingen", "University of Würzburg", "University of Erlangen-Nuremberg", "RWTH Aachen",
+    "University of Paris", "University of Lyon", "Aix-Marseille University", "University of Strasbourg",
+    "University of Montpellier", "University of Lille", "University of Bordeaux", "University of Toulouse",
+    "University of Amsterdam", "Utrecht University", "Erasmus University Rotterdam", "Leiden University",
+    "Vrije Universiteit Amsterdam", "Wageningen University", "University of Groningen", "Eindhoven University of Technology",
+    "KU Leuven", "Ghent University", "University of Brussels", "University of Leuven",
+    "University of Barcelona", "Autonomous University of Barcelona", "Complutense University of Madrid",
+    "University of Valencia", "University of Granada", "University of Seville", "University of Zaragoza",
+    "University of Salamanca", "University of the Basque Country", "Polytechnic University of Catalonia",
+    "Sapienza University of Rome", "University of Bologna", "University of Milan", "University of Padua",
+    "University of Pisa", "University of Naples Federico II", "University of Turin", "Politecnico di Milano",
+    "Stockholm University", "Uppsala University", "University of Gothenburg", "Chalmers University of Technology",
+    "University of Oslo", "Norwegian University of Science and Technology", "University of Copenhagen",
+    "Aarhus University", "University of Helsinki", "Aalto University", "University of Turku",
+    "University of Vienna", "Vienna University of Technology", "University of Zurich", "ETH Zurich",
+    "University of Bern", "University of Geneva", "University of Lausanne", "University of Basel",
+    "University of Warsaw", "Jagiellonian University", "Warsaw University of Technology", "Charles University Prague",
+    "Masaryk University", "Eötvös Loránd University", "University of Belgrade", "University of Athens",
+    "National Technical University of Athens", "Aristotle University of Thessaloniki", "University of Lisbon",
+    "University of Porto", "University of Coimbra", "Trinity College Dublin", "University College Dublin",
+    "University of Edinburgh", "University of Manchester", "University of Bristol", "University of Glasgow",
+    "University of Birmingham", "University of Southampton", "University of Leeds", "University of Sheffield",
+    "University of Nottingham", "University of St Andrews", "University of Warwick", "University of York",
+    "University of Liverpool", "Newcastle University", "Queen Mary University of London", "University of Exeter",
+    "University of Sussex", "University of Leicester", "University of East Anglia", "University of Bath",
+    "University of Surrey", "Lancaster University", "University of Reading", "University of Aberdeen",
+    "University of Dublin", "University of Helsinki", "University of Tokyo", "Kyoto University",
+    "Tokyo Institute of Technology", "Osaka University", "Tohoku University", "Nagoya University",
+    "Hokkaido University", "Kyushu University", "Waseda University", "Keio University", "University of Tsukuba",
+    "Seoul National University", "KAIST", "Yonsei University", "Korea University", "Pohang University of Science and Technology",
+    "Sungkyunkwan University", "Hanyang University", "Ewha Womans University", "Sogang University",
+    "National Taiwan University", "National Tsing Hua University", "National Yang Ming Chiao Tung University",
+    "National Sun Yat-Sen University", "Hong Kong University", "Chinese University of Hong Kong",
+    "Hong Kong University of Science and Technology", "Hong Kong Polytechnic University", "City University of Hong Kong",
+    "Peking University", "Tsinghua University", "Fudan University", "Zhejiang University", "Shanghai Jiao Tong University",
+    "University of Science and Technology of China", "Nanjing University", "Wuhan University", "Harbin Institute of Technology",
+    "Sun Yat-sen University", "Sichuan University", "Tongji University", "Beijing Normal University",
+    "Nankai University", "Tianjin University", "Xiamen University", "Jilin University", "East China Normal University",
+    "Shanghai University", "Huazhong University of Science and Technology", "Dalian University of Technology",
+    "National University of Singapore", "Nanyang Technological University", "Singapore Management University",
+    "University of Malaya", "Universiti Kebangsaan Malaysia", "Universiti Putra Malaysia", "Chulalongkorn University",
+    "Mahidol University", "Bandung Institute of Technology", "University of Indonesia", "Gadjah Mada University",
+    "University of the Philippines", "Indian Institute of Technology Bombay", "Indian Institute of Technology Delhi",
+    "Indian Institute of Science", "Indian Institute of Technology Madras", "University of Delhi",
+    "Jawaharlal Nehru University", "University of Calcutta", "University of Hyderabad", "Banaras Hindu University",
+    "University of Sydney", "University of Melbourne", "University of Queensland", "Monash University",
+    "University of New South Wales", "University of Western Australia", "University of Adelaide",
+    "Australian National University", "University of Auckland", "University of Otago", "Victoria University of Wellington",
+    "University of Cape Town", "University of Witwatersrand", "Stellenbosch University", "University of Pretoria",
+    "Cairo University", "American University in Cairo", "Tel Aviv University", "Hebrew University of Jerusalem",
+    "Technion", "Bar-Ilan University", "Ben-Gurion University", "King Saud University", "King Abdullah University of Science and Technology",
+    "American University of Beirut", "Bogazici University", "Bilkent University", "Sabanci University",
+    "Koç University", "Middle East Technical University", "University of Tehran", "Sharif University of Technology",
+    "Pontifical Catholic University of Chile", "University of Chile", "University of São Paulo", "State University of Campinas",
+    "Federal University of Rio de Janeiro", "Universidad de los Andes", "National University of Colombia",
+    "University of the Andes", "Tecnológico de Monterrey", "National Autonomous University of Mexico",
+    "University of Georgia", "University of Delaware", "University of Oregon", "Oregon State University",
+    "University of Iowa", "Iowa State University", "University of Connecticut", "University of Maryland Baltimore",
+    "Rutgers University", "Stony Brook University", "University at Buffalo", "University of Illinois Chicago",
+    "University of Kansas", "University of Kentucky", "University of Nebraska Lincoln", "University of Oklahoma",
+    "University of South Carolina", "University of Tennessee", "Virginia Tech", "Washington State University",
+    "University of Alberta", "Dalhousie University", "Université Laval", "University of Ottawa",
+    "University of Victoria", "York University", "Concordia University", "Université du Québec",
+    "University of Leeds", "University of Ulster", "University of Portsmouth", "University of Hull",
+    "University of Northumbria", "University of Bayreuth", "University of Bremen", "University of Kiel",
+    "University of Ulm", "University of Genoa", "University of Crete", "University of Costa Rica",
+    "University of Madras", "ITMO University", "Peter the Great St Petersburg Polytechnic University",
+    "Moscow State Institute of International Relations", "Lahore University of Management Sciences",
+    "Edith Cowan University", "University of Palermo", "University of Alcalá", "University of Utara Malaysia",
+    "National University de La Plata", "City University of New York", "Macau University of Science and Technology",
+    "Catholic University of the Sacred Heart", "Kyungpook National University", "University of Texas at Dallas",
+    "China Agricultural University", "Universidad de Palermo", "Pontifical Catholic University Argentina",
+    "University of Technology Brunei", "School of Oriental and African Studies",
+)
+
+
+def _get_qs_top500_brief_set() -> set:
+    """Return set of brief institution names that are in QS top 500 (for filtering affiliation network)."""
+    brief_set = set()
+    if _QS_TOP500_PATH.exists():
+        try:
+            with open(_QS_TOP500_PATH, encoding="utf-8") as f:
+                for line in f:
+                    name = line.strip()
+                    if name and not name.startswith("#"):
+                        b = _brief_institution(_normalize_institution(name))
+                        if b:
+                            brief_set.add(b)
+        except Exception:
+            pass
+    if not brief_set:
+        for name in _QS_TOP500_EMBEDDED:
+            b = _brief_institution(_normalize_institution(name))
+            if b:
+                brief_set.add(b)
+    return brief_set
+
+
+def filter_institution_network_to_qs_top500(
+    inst_edges: defaultdict,
+    institutions: set,
+) -> tuple[defaultdict, set]:
+    """
+    Keep only institutions that match QS World University Rankings top 500.
+    Returns (filtered_inst_edges, filtered_institutions).
+    """
+    allowed = _get_qs_top500_brief_set()
+    keep = institutions & allowed
+    if not keep:
+        return inst_edges, institutions  # no match: return as-is to avoid empty network
+    filtered = defaultdict(int)
+    for (a, b), w in inst_edges.items():
+        if a in keep and b in keep:
+            filtered[(a, b)] = w
+    return filtered, keep
 
 
 def build_institution_network(records: list[dict]) -> tuple[defaultdict, set]:

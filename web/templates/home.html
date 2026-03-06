@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Science Networks — Researcher, Affiliation &amp; Author Networks</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f0f12;
+      --surface: #18181c;
+      --border: #2a2a30;
+      --text: #e4e4e7;
+      --muted: #71717a;
+      --accent: #a78bfa;
+      --accent-hover: #c4b5fd;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .container { max-width: 1000px; margin: 0 auto; padding: 2rem; }
+    header {
+      text-align: center;
+      margin-bottom: 3rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+    header h1 { font-size: 1.75rem; font-weight: 600; margin: 0; }
+    header .subtitle {
+      color: var(--muted);
+      font-size: 1rem;
+      margin-top: 0.5rem;
+      max-width: 560px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+    }
+    .card {
+      display: block;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.75rem;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+    .card-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: rgba(167, 139, 250, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .card h2 { font-size: 1.15rem; font-weight: 600; margin: 0 0 0.5rem 0; }
+    .card p {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin: 0;
+      line-height: 1.5;
+    }
+    .card-arrow {
+      margin-top: 1rem;
+      font-size: 0.85rem;
+      color: var(--accent);
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Science Networks</h1>
+      <p class="subtitle">Build co-authorship and institution networks from publications. Choose a tool below to get started.</p>
+    </header>
+    <div class="cards">
+      <a href="/pi-coauthor" class="card">
+        <div class="card-icon" aria-hidden="true">👤</div>
+        <h2>Researcher network</h2>
+        <p>Build a co-authorship network around any researcher: nodes are co-authors, edges are shared papers. Use Google Scholar, ResearchGate, PubMed, or paste your own paper list.</p>
+        <span class="card-arrow">Open Researcher network →</span>
+      </a>
+      <a href="/affiliation" class="card">
+        <div class="card-icon" aria-hidden="true">🏛️</div>
+        <h2>Affiliation Network</h2>
+        <p>See how institutions collaborate in a research area. Nodes are universities or institutes; edges link those that co-appear on papers. Choose a research area and run a PubMed search.</p>
+        <span class="card-arrow">Open Affiliation Network →</span>
+      </a>
+      <a href="/pi-network" class="card">
+        <div class="card-icon" aria-hidden="true">🔬</div>
+        <h2>PI (Author) Network</h2>
+        <p>Co-authorship network for an entire field: nodes are authors, edges are shared papers. Pick a research area (e.g. Metagenomics, CRISPR) and we build the network from PubMed.</p>
+        <span class="card-arrow">Open PI Network →</span>
+      </a>
+    </div>
+  </div>
+</body>
+</html>
